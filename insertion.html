@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>insertion form</title>
+    <style>
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            text-align: left;
+        }
+
+
+        .actions button {
+            padding: 10px 15px;
+            background-color: #a859b2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .actions input {
+            padding: 8px;
+            width: 200px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        /* Modal container */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(89, 117, 178);
+        }
+
+        /* Modal content */
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 50%;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            font-family: 'Arial', sans-serif;
+        }
+
+
+        /* Form elements */
+        .modal-content form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px; /* Add space between form elements */
+        }
+
+        .modal-content form input,
+        .modal-content form textarea,
+        .modal-content form select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px; /* Prettier font size */
+        }
+
+        /* Form actions */
+        .form-actions {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .form-actions button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            background-color: #346f95;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .form-actions button:hover {
+            background-color: #1f5270;
+            transition: all 200ms ease-in-out;
+        }
+
+
+    </style>
+</head>
+<body>
+<div id="insertFormContainer" class="modal">
+    <div class="modal-content">
+        <form id="insertForm" enctype="multipart/form-data">
+            <h2>Insert</h2>
+            <label for="algorithm">Choose Algorithm:</label>
+            <select name="algorithm" id="algorithm" required>
+                <option value="">Please choose</option>
+                <option value="genetic">Genetic Algorithm</option>
+                <option value="simulated">Simulated Annealing</option>
+            </select>
+
+
+            <label for="vehiclesNumber">vehicles Number:</label>
+            <input type="number" id="vehiclesNumber" name="vehiclesNumber" required>
+            <button type="button" onclick="generateCapacityFields()">Set Capacities</button>
+
+            <div id="capacityFields"></div>
+
+            <label for="PackagesNumber">Packages Number:</label>
+            <input type="number" id="PackagesNumber" name="PackagesNumber" required>
+
+            <button type="button" onclick="generatePackagesFields()">Packages specifications</button>
+
+            <div id="packagesFields"></div>
+
+            <div class="form-actions">
+                <button type="submit">Submit</button>
+            </div>
+
+        </form>
+     <div class="form-container">
+    <h2>Or Upload a File</h2>
+    <form id="fileUploadForm">
+        <label for="fileInput">Upload .txt File:</label>
+        <input type="file" id="fileInput" name="file" accept=".txt" required>
+        <button type="submit">Upload</button>
+    </form>
+    </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('insertForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const formData = new FormData(this);
+        const data = {
+            algorithm: formData.get("algorithm"),
+            vehiclesNumber: formData.get("vehiclesNumber"),
+            vehicles: [],
+            packages: []
+        };
+
+
+        formData.forEach((value, key) => {
+            const match = key.match(/^package\[(\d+)]\[(\w+)]$/);
+            if (match) {
+                const index = parseInt(match[1]);
+                const field = match[2];
+
+                if (!data.packages[index]) {
+                    data.packages[index] = {};
+                }
+
+                data.packages[index][field] = parseFloat(value); // Convert string to number
+            }
+
+            //Extract vehicle data
+            const vehicleMatch = key.match(/^vehicle\[(\d+)]\[(\w+)]$/);
+            if (vehicleMatch) {
+                const index = parseInt(vehicleMatch[1]);
+                const field = vehicleMatch[2];  // should be "capacity"
+
+                if (!data.vehicles[index]) data.vehicles[index] = {};
+                data.vehicles[index][field] = parseFloat(value);
+            }
+
+        });
+        try {
+            const response = await fetch('/userInsertion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+               if (response.ok) {
+                   const result = await response.json();
+                  console.log(result); // See what’s inside
+
+                  localStorage.setItem("algorithmResult", JSON.stringify(result));
+                  window.location.href = "/results.html";  // or just "results.html" if in same folder
+
+               } else {
+                const error = await response.json();
+                alert(`Error: ${error.message}`);
+
+            }
+        } catch (error) {
+            console.error('Error inserting data:', error);
+
+        } finally {
+
+            insertForm.reset();
+
+        }
+    });
+
+
+    function generateCapacityFields() {
+        const num = document.getElementById("vehiclesNumber").value;
+        const container = document.getElementById("capacityFields");
+        container.innerHTML = "";
+        for (i = 0; i < num; i++) {
+            const label = document.createElement("label");
+            label.textContent = `Vehicle ${i + 1} Capacity:`;
+
+            const input = document.createElement("input");
+            input.type = "number";
+            input.name = `vehicle[${i}][capacity]`;
+            input.required = true;
+            container.appendChild(label);
+            container.appendChild(input);
+
+        }
+    }
+
+    function generatePackagesFields() {
+        const num = document.getElementById("PackagesNumber").value;
+        const container = document.getElementById("packagesFields");
+        container.innerHTML = "";
+        for (i = 0; i < num; i++) {
+            container.innerHTML += `
+            <fieldset style="margin-bottom: 1em;">
+                <legend>Package ${i + 1}</legend>
+                <label>X:</label>
+                <input type="number" name="package[${i}][x]" step="0.1" required>
+                <label>Y:</label>
+                <input type="number" name="package[${i}][y]" step="0.1" required>
+                <label>Weight (kg):</label>
+                <input type="number" name="package[${i}][weight]" required>
+                <label>Priority (1-5):</label>
+                <input type="number" name="package[${i}][priority]" min="1" max="5" required>
+            </fieldset>
+        `;
+
+        }
+
+
+    }
+function showResults(data) {
+    const resultDiv = document.createElement('div');
+    resultDiv.innerHTML = `<h3>Algorithm Used: ${data.algorithm}</h3>`;
+
+    if (data.algorithm === "genetic") {
+        resultDiv.innerHTML += `<h4>Best Fitness: ${data.best_fitness}</h4>`;
+    } else {
+        resultDiv.innerHTML += `<h4>Total Distance: ${data.best_distance}</h4>`;
+    }
+
+    resultDiv.innerHTML += `<h4>Vehicle Assignments:</h4>`;
+
+    data.vehicle_package_list.forEach((vehicle, index) => {
+        resultDiv.innerHTML += `<strong>Vehicle ${index + 1}</strong><ul>`;
+        vehicle.forEach(pkg => {
+            resultDiv.innerHTML += `<li>Destination: ${pkg.destination}, Weight: ${pkg.weight}, Priority: ${pkg.priority}</li>`;
+        });
+        resultDiv.innerHTML += `</ul>`;
+    });
+
+    if (data.skipped_packages && data.skipped_packages.length > 0) {
+        resultDiv.innerHTML += `<h4>Skipped Packages:</h4><ul>`;
+        data.skipped_packages.forEach(pkg => {
+            resultDiv.innerHTML += `<li>Destination: ${pkg.destination}, Weight: ${pkg.weight}, Priority: ${pkg.priority}</li>`;
+        });
+        resultDiv.innerHTML += `</ul>`;
+    }
+
+    document.body.appendChild(resultDiv);
+}
+
+    document.getElementById('fileUploadForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const form = event.target;
+        const formData = new FormData(form);
+
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+               if (response.ok) {
+                   const result = await response.json();
+                  console.log(result); // See what’s inside
+                  localStorage.setItem("algorithmResult", JSON.stringify(result));
+                  window.location.href = "/results.html";  // or just "results.html" if in same folder
+
+               } else {
+                const error = await response.json();
+                alert(`Error: ${error.message}`);
+
+            }
+        } catch (error) {
+            console.error('Upload failed:', error);
+        }
+    });
+</script>
+</body>
+</html>

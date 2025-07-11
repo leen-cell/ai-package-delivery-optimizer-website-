@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Results</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      margin-top: 30px;
+      color: #333;
+    }
+
+    canvas {
+      border: 2px solid #444;
+      background-color: #fff;
+      margin: 20px 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    #resultsContainer {
+      width: 90%;
+      max-width: 800px;
+      background-color: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 40px;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin-top: 5px;
+      margin-bottom: 15px;
+    }
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    strong {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 16px;
+      color: #555;
+    }
+
+    h3, h4 {
+      margin-bottom: 10px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h2>Results</h2>
+  <canvas id="mapCanvas" width="700" height="700"></canvas>
+  <div id="resultsContainer"></div>
+
+<script>
+const canvas = document.getElementById("mapCanvas");
+const ctx = canvas.getContext("2d");
+const padding = 40;
+
+let minX, maxX, minY, maxY;
+
+const result = JSON.parse(localStorage.getItem("algorithmResult"));
+
+if (result) {
+  const container = document.getElementById('resultsContainer');
+  let html = `<h3>Algorithm Used: ${result.algorithm}</h3>`;
+
+  if (result.algorithm === "genetic") {
+
+    html += `<h4>Total Distance: ${result.best_distance.toFixed(2)}</h4>`;
+  } else {
+    html += `<h4>Total Distance: ${result.best_distance.toFixed(2)}</h4>`;
+  }
+
+  html += `<h4>Vehicle Assignments:</h4>`;
+  result.vehicle_package_list.forEach((vehicle, index) => {
+    html += `<strong>Vehicle ${index + 1}</strong><ul>`;
+    vehicle.forEach(pkg => {
+      html += `<li>Destination: ${pkg.destination}, Weight: ${pkg.weight}, Priority: ${pkg.priority}</li>`;
+    });
+    html += `</ul>`;
+  });
+
+  if (result.skipped_packages && result.skipped_packages.length > 0) {
+    html += `<h4>Skipped Packages:</h4><ul>`;
+    result.skipped_packages.forEach(pkg => {
+      html += `<li>Destination: ${pkg.destination}, Weight: ${pkg.weight}, Priority: ${pkg.priority}</li>`;
+    });
+    html += `</ul>`;
+  }
+
+  container.innerHTML = html;
+
+  const vehiclePackageList = result.vehicle_package_list;
+  const allPoints = [{ x: 0, y: 0 }];
+
+  vehiclePackageList.forEach(vehicle => {
+    vehicle.forEach(pkg => {
+      const coords = pkg.destination.replace(/[()]/g, '').split(',');
+      allPoints.push({
+        x: parseFloat(coords[0]),
+        y: parseFloat(coords[1])
+      });
+    });
+  });
+
+  const xs = allPoints.map(p => p.x);
+  const ys = allPoints.map(p => p.y);
+  minX = Math.min(...xs);
+  maxX = Math.max(...xs);
+  minY = Math.min(...ys);
+  maxY = Math.max(...ys);
+
+  const deltaX = maxX - minX || 1;
+  const deltaY = maxY - minY || 1;
+
+  const scaleX = x => padding + ((x - minX) / deltaX) * (canvas.width - 2 * padding);
+  const scaleY = y => canvas.height - padding - ((y - minY) / deltaY) * (canvas.height - 2 * padding);
+
+  const colors = ["red", "green", "orange", "purple", "blue", "brown", "teal"];
+
+  animateVehicles(vehiclePackageList, scaleX, scaleY, colors);
+} else {
+  document.body.innerHTML = "<p style='margin-top: 50px;'>No result data found.</p>";
+}
+
+function animateVehicles(vehiclePackageList, scaleX, scaleY, colors) {
+const animationSpeed = 0.005;
+const pauseDuration = 600; // 0.6 seconds
+
+  const paths = vehiclePackageList.map((vehicle, vehicleIndex) => {
+    const points = vehicle.map(pkg => {
+      const coords = pkg.destination.replace(/[()]/g, '').split(',');
+      return {
+        x: parseFloat(coords[0]),
+        y: parseFloat(coords[1])
+      };
+    });
+    points.unshift({ x: 0, y: 0 });
+    points.push({ x: 0, y: 0 });
+    return {
+      color: colors[vehicleIndex % colors.length],
+      points,
+      t: 0,
+      waiting: false,
+      waitStart: null
+    };
+  });
+
+  function drawFrame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw axes
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding, canvas.height - padding);
+    ctx.lineTo(canvas.width - padding, canvas.height - padding);
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, canvas.height - padding);
+    ctx.stroke();
+
+    // Draw ticks
+    ctx.fillStyle = "#000";
+    ctx.font = "12px Arial";
+    const tickCount = 5;
+    for (let i = 0; i <= tickCount; i++) {
+      const xVal = minX + (i / tickCount) * (maxX - minX);
+      const xPos = scaleX(xVal);
+      ctx.beginPath();
+      ctx.moveTo(xPos, canvas.height - padding);
+      ctx.lineTo(xPos, canvas.height - padding + 5);
+      ctx.stroke();
+      ctx.fillText(xVal.toFixed(1), xPos - 10, canvas.height - padding + 20);
+
+      const yVal = minY + (i / tickCount) * (maxY - minY);
+      const yPos = scaleY(yVal);
+      ctx.beginPath();
+      ctx.moveTo(padding, yPos);
+      ctx.lineTo(padding - 5, yPos);
+      ctx.stroke();
+      ctx.fillText(yVal.toFixed(1), padding - 35, yPos + 4);
+    }
+
+    // Draw static paths and points
+    paths.forEach(path => {
+      const { points, color } = path;
+      ctx.beginPath();
+      ctx.moveTo(scaleX(points[0].x), scaleY(points[0].y));
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(scaleX(points[i].x), scaleY(points[i].y));
+      }
+      ctx.strokeStyle = color + "55";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      points.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(scaleX(p.x), scaleY(p.y), 4, 0, 2 * Math.PI);
+        ctx.fillStyle = (p.x === 0 && p.y === 0) ? "black" : color;
+        ctx.fill();
+      });
+    });
+
+    let anyActive = false;
+    const now = performance.now();
+
+    paths.forEach(path => {
+      const { points, color } = path;
+      const segmentCount = points.length - 1;
+
+      let totalProgress = path.t;
+      let segIndex = Math.floor(totalProgress);
+      let localT = totalProgress - segIndex;
+
+      if (segIndex >= segmentCount) return;
+
+      anyActive = true;
+
+      if (localT >= 1 && !path.waiting) {
+        path.waiting = true;
+        path.waitStart = now;
+        return;
+      }
+
+      if (path.waiting) {
+        if (now - path.waitStart < pauseDuration) {
+          return;
+        } else {
+          path.waiting = false;
+          path.t = segIndex + 0.001; // reset after pause
+        }
+      }
+
+      const start = points[segIndex];
+      const end = points[segIndex + 1];
+
+      const currX = start.x + (end.x - start.x) * localT;
+      const currY = start.y + (end.y - start.y) * localT;
+
+      ctx.beginPath();
+      ctx.arc(scaleX(currX), scaleY(currY), 6, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      path.t += animationSpeed;
+    });
+
+    if (anyActive) requestAnimationFrame(drawFrame);
+  }
+
+  drawFrame();
+}
+</script>
+
+
+
+
+</body>
+</html>
+
+
